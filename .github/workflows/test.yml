@@ -25,6 +25,13 @@ jobs:
         with:
           nim-version: ${{ matrix.nim-version }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # install typesense
+      - run: curl -O https://dl.typesense.org/releases/0.25.1/typesense-server-0.25.1-amd64.deb
+      - run: |
+          sudo apt install ./typesense-server-0.25.1-amd64.deb
+          sudo systemctl start typesense-server.service
+          export TYPESENSE_KEY=$(awk -F "=" '/api-key/ {print $2}' /etc/typesense/typesense-server.ini)
+      # install nim
       - run: nimble install -Y
       - run: nim c -r src/${{ github.event.repository.name }}.nim
       - run: nimble test

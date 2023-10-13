@@ -1,5 +1,4 @@
 <p align="center">
-  <img src="https://github.com/openpeeps/PKG/blob/main/.github/logo.png" width="90px"><br>
   Nim 👑 client for <a href="https://github.com/typesense/typesense" title="Typesense on GitHub">Typesense</a>® 🚀 A fast, typo tolerant, in-memory<br>
   fuzzy search engine for building delightful search experiences. No PhD required.
 </p>

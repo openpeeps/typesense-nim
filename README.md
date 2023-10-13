@@ -1,6 +1,5 @@
 <p align="center">
-  Nim 👑 client for <a href="https://github.com/typesense/typesense" title="Typesense on GitHub">Typesense</a>® 🚀 A fast, typo tolerant, in-memory<br>
-  fuzzy search engine for building delightful search experiences. No PhD required.
+  Nim 👑 client for <a href="https://github.com/typesense/typesense" title="Typesense on GitHub">Typesense</a>®<br> 🚀 A fast, typo tolerant, in-memory fuzzy search engine for<br>building delightful search experiences. No PhD required.
 </p>
 
 <p align="center">

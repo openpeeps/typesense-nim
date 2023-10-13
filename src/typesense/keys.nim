@@ -9,10 +9,10 @@ import pkg/jsony
 import std/[options, asyncdispatch, httpclient, json]
 
 type
-  TypesenseKeysClient* = distinct TypesenseClient
+  KeysClient* = distinct TypesenseClient
   Key* = ref object
     id: int
-    actions: seq[TypesenseActions]
+    actions: set[TypesenseActions]
       # List of allowed actions. See next table for
       # possible values.
     collections: seq[string]
@@ -38,12 +38,12 @@ type
     ## Check [Typesense API Resources - API Keys](https://typesense.org/docs/0.25.1/api/api-keys.html)
     keys: seq[Key]
 
-proc keys*(ts: TypesenseClient): TypesenseKeysClient {.inline.} =
-  ## Returns a HttpClient for managing `/keys` API endpoint
-  result = TypesenseKeysClient ts
+proc keys*(ts: TypesenseClient): KeysClient {.inline.} =
+  ## Returns a `KeysClient` for managing `/keys` API endpoint
+  result = KeysClient ts
 
-proc create*(ts: TypesenseKeysClient, desc: string,
-    actions: set[TypesenseActions] = {tsDocumentSearch},
+proc create*(ts: KeysClient, desc: string,
+    actions: set[TypesenseActions] = {tsAnyActions},
     collections: seq[string] = @["*"]): Future[Key] {.async.} =
   ## Create a new Key with given permissions
   let data = %*{
@@ -58,7 +58,7 @@ proc create*(ts: TypesenseKeysClient, desc: string,
       result = jsony.fromJson(body, Key)
     else: raiseClientException()
 
-proc retrieve*(ts: TypesenseKeysClient): Future[Keys] {.async.} =
+proc retrieve*(ts: KeysClient): Future[Keys] {.async.} =
   ## Retrieve available `Keys`
   let res = await ts.native.get(tsEndpointKeys)
   let body = await res.body
@@ -68,7 +68,7 @@ proc retrieve*(ts: TypesenseKeysClient): Future[Keys] {.async.} =
     else:
       raiseClientException()
 
-proc retrieve*(ts: TypesenseKeysClient, id: int): Future[Key] {.async.} =
+proc retrieve*(ts: KeysClient, id: int): Future[Key] {.async.} =
   ## Retrieve a `Key` by `id` from available `Keys`
   let res = await ts.native.get(tsEndpointKeys, [$id])
   let body = await res.body
@@ -78,7 +78,7 @@ proc retrieve*(ts: TypesenseKeysClient, id: int): Future[Key] {.async.} =
     else:
       raiseClientException()
 
-proc delete*(ts: TypesenseKeysClient, id: int): Future[Option[int]] {.async.} =
+proc delete*(ts: KeysClient, id: int): Future[Option[int]] {.async.} =
   ## Delete a specific `Key` by `id`
   let res = await ts.native.delete(tsEndpointKeys, [$id])
   let body = await res.body
@@ -88,6 +88,42 @@ proc delete*(ts: TypesenseKeysClient, id: int): Future[Option[int]] {.async.} =
       result = some(resp["id"].getInt)
     else: discard
 
-proc `$`*(k: Keys|Key): string =
-  ## Convert one or more keys to stringified JSON
-  jsony.toJson(k)
+proc deleteAll*(ts: KeysClient, exceptKeys: seq[int] = @[]): Future[void] {.async.} =
+  ## Performs multiple `DELETE` requests for deleting all Keys.
+  ## Skip deleting specific keys by passing key ID to `exceptKeys`
+  var all = await ts.retrieve()
+  for key in all.keys:
+    if key.id notin exceptKeys:
+      let x = await ts.native.delete(tsEndpointKeys, [$key.id])
+
+#
+# Keys - Getters
+#
+proc len*(keys: Keys): int =
+  result = keys.keys.len
+
+#
+# Key - Getters
+#
+proc getKeyId*(key: Key): int =
+  ## Get `Key` id
+  result = key.id
+
+proc getValue*(key: Key): string =
+  ## Get the generated API key for given `Key`.
+  result = key.value
+
+proc getActions*(key: Key): set[TypesenseActions] =
+  ## Get actions (permissions) set for given `Key`
+  result = key.actions
+
+proc getDescription*(key: Key): string =
+  ## Get the internal description of `Key`
+  result = key.description
+
+proc getExpirationTime*(key: Key): int64 =
+  ## Get the expiration time in Unix timestamp
+  result = key.expires_at
+
+proc `$`*(k: Keys): string = jsony.toJson(k)
+proc `$`*(k: Key): string = jsony.toJson(k)

@@ -33,5 +33,5 @@ jobs:
           export TYPESENSE_KEY=$(awk -F "=" '/api-key/ {print $2}' /etc/typesense/typesense-server.ini)
       # install nim
       - run: nimble install -Y
-      - run: nim c -r src/${{ github.event.repository.name }}.nim
+      - run: nim c -r src/typesense.nim
       - run: nimble test

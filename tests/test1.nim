@@ -4,6 +4,10 @@ import typesense
 let
   rootkey = getEnv("TYPESENSE_KEY").strip()
   address = "0.0.0.0"
+  # rootkey = "bV9ZXnOpBFc1CPivLCvZ74OuutTniiei44lyziQqrFgACsZy"
+  # address = "10.242.195.202" # 0.0.0.0
+
+echo rootkey
 
 template newTypesenseClient() {.dirty.} =
   var ts = newClient(address, Port(8108), rootkey)
@@ -11,7 +15,6 @@ template newTypesenseClient() {.dirty.} =
 test "can init":
   newTypesenseClient()
   assert waitFor(ts.health())
-  ts.close()
 
 test "/keys POST":
   # Create a new key

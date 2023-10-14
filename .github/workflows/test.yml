@@ -30,7 +30,6 @@ jobs:
       - run: |
           sudo apt install ./typesense-server-0.25.1-amd64.deb
           sudo systemctl start typesense-server.service
-          export TYPESENSE_KEY=$(awk -F "=" '/api-key/ {print $2}' /etc/typesense/typesense-server.ini)
       # install nim
       - run: nimble install -Y
       - run: nim c -r src/typesense.nim

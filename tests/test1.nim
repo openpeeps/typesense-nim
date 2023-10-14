@@ -1,13 +1,12 @@
-import std/[unittest, envvars, strutils, asyncdispatch]
+import std/[unittest, parsecfg, strutils, asyncdispatch]
 import typesense
 
 let
-  rootkey = getEnv("TYPESENSE_KEY").strip()
+  dict = loadConfig("/etc/typesense/typesense-server.ini")
+  rootkey = dict.getSectionValue("server", "api-key").strip()
   address = "0.0.0.0"
   # rootkey = "bV9ZXnOpBFc1CPivLCvZ74OuutTniiei44lyziQqrFgACsZy"
-  # address = "10.242.195.202" # 0.0.0.0
-
-echo rootkey
+  # address = "10.242.195.202"
 
 template newTypesenseClient() {.dirty.} =
   var ts = newClient(address, Port(8108), rootkey)

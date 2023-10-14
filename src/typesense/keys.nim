@@ -10,6 +10,8 @@ import std/[options, asyncdispatch, httpclient, json]
 
 type
   KeysClient* = distinct TypesenseClient
+  KeyClient* = distinct TypesenseClient
+
   Key* = ref object
     id: int
     actions: set[TypesenseActions]
@@ -40,7 +42,11 @@ type
 
 proc keys*(ts: TypesenseClient): KeysClient {.inline.} =
   ## Returns a `KeysClient` for managing `/keys` API endpoint
-  result = KeysClient ts
+  result = KeysClient(ts)
+
+proc key*(ts: TypesenseClient, keyname: string): KeyClient =
+  result = KeyClient(ts)
+  result.setpath(keyname)
 
 proc create*(ts: KeysClient, desc: string,
     actions: set[TypesenseActions] = {tsAnyActions},
@@ -68,9 +74,9 @@ proc retrieve*(ts: KeysClient): Future[Keys] {.async.} =
     else:
       raiseClientException()
 
-proc retrieve*(ts: KeysClient, id: int): Future[Key] {.async.} =
+proc retrieve*(ts: KeyClient): Future[Key] {.async.} =
   ## Retrieve a `Key` by `id` from available `Keys`
-  let res = await ts.native.get(tsEndpointKeys, [$id])
+  let res = await ts.native.get(tsEndpointKey)
   let body = await res.body
   case res.code:
     of Http200:
@@ -80,7 +86,8 @@ proc retrieve*(ts: KeysClient, id: int): Future[Key] {.async.} =
 
 proc delete*(ts: KeysClient, id: int): Future[Option[int]] {.async.} =
   ## Delete a specific `Key` by `id`
-  let res = await ts.native.delete(tsEndpointKeys, [$id])
+  ts.setpath($id)
+  let res = await ts.native.delete(tsEndpointKey)
   let body = await res.body
   case res.code:
     of Http200:

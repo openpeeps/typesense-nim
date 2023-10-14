@@ -6,11 +6,11 @@
 
 import ./client
 import pkg/jsony
-import std/[options, asyncdispatch, httpclient,
-  json, macros, strutils]
+import std/[asyncdispatch, httpclient, json, macros, strutils]
 
 type
   CollectionClient* = distinct TypesenseClient
+  CollectionsClient* = distinct TypesenseClient
 
   CollectionFieldType* = distinct string 
 
@@ -92,12 +92,18 @@ proc drop*(name: string): CollectionField =
   result.name = name
   result.drop = true
 
-proc collections*(ts: TypesenseClient): CollectionClient {.inline.} =
+proc collection*(ts: TypesenseClient, name: string = ""): CollectionClient {.inline.} =
   ## Returns a `CollectionClient` for managing
-  ## `/collections` API endpoint
-  result = CollectionClient ts
+  ## a single collection via `/collections/{name}` API endpoint
+  result = CollectionClient(ts)
+  result.setpath(name)
 
-proc create*(ts: CollectionClient, name: string,
+proc collections*(ts: TypesenseClient): CollectionsClient =
+  ## Returns a `CollectionsClient` for managing
+  ## `/collections` API endpoint  
+  result = CollectionsClient(ts)
+
+proc create*(ts: CollectionsClient, name: string,
     fields: seq[CollectionField], defaultSortingField: string): Future[Collection] {.async.} =
   ## Create a new `Collection` from `schema`
   let data = "{\"name\":\"" & name & "\",\"fields\":" & jsony.toJson(fields) & ",\"default_sorting_field\":\"" & defaultSortingField & "\"}"
@@ -109,17 +115,16 @@ proc create*(ts: CollectionClient, name: string,
   else:
     raiseClientException()
 
-proc update*(ts: CollectionClient, collectionName: string,
-    fields: seq[CollectionField]): Future[void] {.async.} =
+proc update*(ts: CollectionClient, fields: seq[CollectionField]): Future[void] {.async.} =
   ## Update a Collection by `collectionName`
   let data = "{\"fields\": " & jsony.toJson(fields) & "}"
-  let res = await ts.native.patch(tsEndpointCollections, [collectionName], data)
+  let res = await ts.native.patch(tsEndpointCollection, data)
   let body = await res.body
   case res.code:
   of Http200: discard
   else: raiseClientException()
 
-proc retrieve*(ts: CollectionClient): Future[seq[Collection]] {.async.} =
+proc retrieve*(ts: CollectionsClient): Future[seq[Collection]] {.async.} =
   ## Returns a summary of all your collections.
   ## The collections are returned sorted by creation date,
   ## with the most recent collections appearing first
@@ -131,26 +136,41 @@ proc retrieve*(ts: CollectionClient): Future[seq[Collection]] {.async.} =
   else:
     raiseClientException()
 
-proc retrieve*(ts: CollectionClient, collectionName: string): Future[Collection] {.async.} =
+proc retrieve*(ts: CollectionClient): Future[Collection] {.async.} =
   ## Retrieve a `Collection` by `collectionName`
-  let res = await ts.native.get(tsEndpointCollections, [collectionName])
+  let res = await ts.native.get(tsEndpointCollection)
   let body = await res.body
-  case res.code:
+  case res.code
   of Http200:
     result = jsony.fromJson(body, Collection)
   else:
     raiseClientException()
 
-proc delete*(ts: CollectionClient, collectionName: string): Future[void] {.async.} =
+proc exists*(ts: CollectionClient): Future[bool] {.async.} =
+  ## Determine if a Collection exists by name
+  let res = await ts.native.get(tsEndpointCollection)
+  case res.code
+  of Http200:
+    return true
+  of Http404:
+    return false
+  else:
+    let body = await res.body
+    raiseClientException()
+
+proc delete*(ts: CollectionClient): Future[void] {.async.} =
   ## Permanently drops a collection. This action cannot be undone.
   ## For large collections, this might have an impact on read latencies.
-  let res = await ts.native.delete(tsEndpointCollections, [collectionName])
+  let res = await ts.native.delete(tsEndpointCollection)
 
-proc deleteAll*(ts: CollectionClient): Future[void] {.async.} =
-  ## Performs multiple `DELETE` requests for deleting all Collections
+proc deleteAll*(ts: CollectionsClient): Future[void] {.async.} =
+  ## Performs a `GET` request to fetch available
+  ## collections. Then, makes multiple `DELETE` requests
+  ## for deleting each Collection, one by one.
   let all: seq[Collection] = await ts.retrieve()
   for x in all:
-    await ts.delete(x.name)
+    var ts = TypesenseClient(ts)
+    await ts.collection(x.name).delete
 
 proc `$`*(k: seq[Collection]): string = jsony.toJson(k)
 proc `$`*(k: Collection): string = jsony.toJson(k)

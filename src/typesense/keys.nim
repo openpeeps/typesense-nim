@@ -93,8 +93,7 @@ proc deleteAll*(ts: KeysClient, exceptKeys: seq[int] = @[]): Future[void] {.asyn
   ## Skip deleting specific keys by passing key ID to `exceptKeys`
   var all = await ts.retrieve()
   for key in all.keys:
-    if key.id notin exceptKeys:
-      let x = await ts.native.delete(tsEndpointKeys, [$key.id])
+    let x = await ts.delete(key.id)
 
 #
 # Keys - Getters

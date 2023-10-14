@@ -6,7 +6,8 @@
 
 import ./client
 import pkg/jsony
-import std/[options, asyncdispatch, httpclient, json, macros]
+import std/[options, asyncdispatch, httpclient,
+  json, macros, strutils]
 
 type
   CollectionClient* = distinct TypesenseClient
@@ -17,6 +18,7 @@ type
     name: string
     `type`: CollectionFieldType
     facet: bool
+    drop: bool
 
   Collection* = object
     ## In Typesense, every record you index is called a Document
@@ -41,33 +43,62 @@ type
       # List of symbols or special characters to be indexed.
     default_sorting_field: string
 
-const tsFieldtypes = ["string", "seq[string]", "int32", "seq[int32]",
-  "int64", "seq[int64]", "float", "seq[float]", "bool", "seq[bool]",
-  "seq[tuple[lat, lng: float]]", "object", "auto"]
+macro `%`*(x: typedesc): untyped =
+  ## Convert `CollectionFieldType` to Typesense field type.
+  ## Where `x` can be:
+  ## ```
+  ## string, seq[string], int32, seq[int32],
+  ## int64, seq[int64], float, seq[float], bool,
+  ## seq[bool], (float, float), seq[(float, float)], object, auto
+  ## ```
+  ## Note that `(float, float)` is used to represent `geopoint`
+  ## field type (latitude and longitude specified as [lat, lng]),
+  ## and `seq[(float, float)] converts to `geopoint[]`.
+  var str = x.repr
+  # this is kinda stupid
+  if str.startsWith("seq[("):
+    str = "geopoint"
+  elif str.startsWith("("):
+    str = "geopoint[]"
+  elif str.startsWith("seq"):
+    str = str[4..^2] & "[]"
+  result = newCall(
+    ident("CollectionFieldType"),
+    newLit(str)
+  )
 
-macro tstype*(x: typedesc): untyped =
-  let str = x.repr
-  if str in tsFieldtypes:
-    result = newCall(
-      ident("CollectionFieldType"),
-      newLit(str)
-    )
+proc dumpHook*(s: var string, field: CollectionField) =
+  case field.drop
+  of true:
+    add s, "{"
+    add s, "\"name\":\"" & field.name & "\","
+    add s, "\"drop\":" & $(field.drop)
+    add s, "}"
   else:
-    raise newException(TypesenseClientError,
-      "Unknown Field Type. Can be one of " & $(tsFieldtypes))
+    add s, "{"
+    add s, "\"name\":\"" & field.name & "\","
+    add s, "\"type\":\"" & string(field.`type`) & "\","
+    add s, "\"facet\":" & $(field.facet)
+    add s, "}"
 
-proc newField*(name: string, `type`: CollectionFieldType, facet: bool): CollectionField =
+proc field*(name: string, `type`: CollectionFieldType, facet: bool): CollectionField =
   ## Create a new `CollectionField`
   result.name = name
   result.`type` = `type`
-  result.facet = facet  
+  result.facet = facet
+
+proc drop*(name: string): CollectionField =
+  ## Drop a `CollectionField` by name
+  result.name = name
+  result.drop = true
 
 proc collections*(ts: TypesenseClient): CollectionClient {.inline.} =
-  ## Returns a `CollectionClient` for managing `/collections` API endpoint
+  ## Returns a `CollectionClient` for managing
+  ## `/collections` API endpoint
   result = CollectionClient ts
 
 proc create*(ts: CollectionClient, name: string,
-  fields: seq[CollectionField], defaultSortingField: string): Future[Collection] {.async.} =
+    fields: seq[CollectionField], defaultSortingField: string): Future[Collection] {.async.} =
   ## Create a new `Collection` from `schema`
   let data = "{\"name\":\"" & name & "\",\"fields\":" & jsony.toJson(fields) & ",\"default_sorting_field\":\"" & defaultSortingField & "\"}"
   let res = await ts.native.post(tsEndpointCollections, data)
@@ -78,6 +109,16 @@ proc create*(ts: CollectionClient, name: string,
   else:
     raiseClientException()
 
+proc update*(ts: CollectionClient, collectionName: string,
+    fields: seq[CollectionField]): Future[void] {.async.} =
+  ## Update a Collection by `collectionName`
+  let data = "{\"fields\": " & jsony.toJson(fields) & "}"
+  let res = await ts.native.patch(tsEndpointCollections, [collectionName], data)
+  let body = await res.body
+  case res.code:
+  of Http200: discard
+  else: raiseClientException()
+
 proc retrieve*(ts: CollectionClient): Future[seq[Collection]] {.async.} =
   ## Returns a summary of all your collections.
   ## The collections are returned sorted by creation date,
@@ -85,19 +126,31 @@ proc retrieve*(ts: CollectionClient): Future[seq[Collection]] {.async.} =
   let res = await ts.native.get(tsEndpointCollections)
   let body = await res.body
   case res.code
-    of Http200:
-      result = jsony.fromJson(body, seq[Collection])
-    else:
-      raiseClientException()
+  of Http200:
+    result = jsony.fromJson(body, seq[Collection])
+  else:
+    raiseClientException()
 
 proc retrieve*(ts: CollectionClient, collectionName: string): Future[Collection] {.async.} =
   ## Retrieve a `Collection` by `collectionName`
-  discard # todo
+  let res = await ts.native.get(tsEndpointCollections, [collectionName])
+  let body = await res.body
+  case res.code:
+  of Http200:
+    result = jsony.fromJson(body, Collection)
+  else:
+    raiseClientException()
 
-proc delete*(ts: CollectionClient, collectionName: string): Future[bool] {.async.} =
+proc delete*(ts: CollectionClient, collectionName: string): Future[void] {.async.} =
   ## Permanently drops a collection. This action cannot be undone.
   ## For large collections, this might have an impact on read latencies.
-  discard # todo
+  let res = await ts.native.delete(tsEndpointCollections, [collectionName])
+
+proc deleteAll*(ts: CollectionClient): Future[void] {.async.} =
+  ## Performs multiple `DELETE` requests for deleting all Collections
+  let all: seq[Collection] = await ts.retrieve()
+  for x in all:
+    await ts.delete(x.name)
 
 proc `$`*(k: seq[Collection]): string = jsony.toJson(k)
 proc `$`*(k: Collection): string = jsony.toJson(k)

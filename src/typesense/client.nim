@@ -34,10 +34,10 @@ type
     httpHeaders: HttpHeaders
 
   TypesenseEndpoint* = enum
-    tsEndpointStatus = "/health"
-    tsEndpointCollections = "/collections"
-    tsEndpointKeys = "/keys"
-    tsEndpointAliases = "/aliases"
+    tsEndpointStatus = "health"
+    tsEndpointCollections = "collections"
+    tsEndpointKeys = "keys"
+    tsEndpointAliases = "aliases"
 
   JsonResponse = (HttpCode, JsonNode)
   TypesenseClientError* = object of CatchableError
@@ -52,7 +52,7 @@ proc parseJson*(res: AsyncResponse): Future[JsonNode] {.async.} =
   ## Parse response body to JsonNode
   jsony.fromJson(await res.body(), JsonNode)
 
-proc newClient*(address: string, port: Port, apiKey: string): TypesenseClient =
+proc newClient*(address: string, apiKey: string, port: Port = Port(8108)): TypesenseClient =
   ## Create a new `TypesenseClient`
   result = TypesenseClient(config: TypesenseConfig(url: address, port: port))
   var headers = newHttpheaders([
@@ -81,6 +81,11 @@ proc post*(ts: TypesenseClient, ep: TypesenseEndpoint, data: string): Future[Asy
 proc delete*(ts: TypesenseClient, ep: TypesenseEndpoint, paths: openarray[string]): Future[AsyncResponse] =
   # Make a `DELETE` request to `ep` TypesenseEndpoint
   return ts.httpClient.delete(ts.getUrl(ep, paths))
+
+proc patch*(ts: TypesenseClient, ep: TypesenseEndpoint,
+    paths: openarray[string], data: string): Future[AsyncResponse] =
+  ## Make a `PATCH` request to `ep` TypesenseEndpoint
+  return ts.httpClient.patch(ts.getUrl(ep, paths), body = data)
 
 template raiseClientException* {.dirty.} =
   block:

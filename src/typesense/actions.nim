@@ -9,6 +9,8 @@ import pkg/jsony
 
 type
   TypesenseActions* = enum
+    tsAnyActions = "*"
+      ## Allow all actions
     tsCollectionAll = "collections:*"
       ## Allow all kinds of collection related operations.
     tsCollectionCreate = "collections:create"
@@ -89,7 +91,7 @@ type
       ## Allows the deletion of API keys.
 
     # Misc
-    tsMiscAll = "*"
+    tsMiscAll # todo
       ## Allow all operations
     tsMiscMetric = "metrics.json:list"
       ## Allows access to the metrics endpoints

@@ -8,7 +8,9 @@ import std/[httpclient, httpcore, net,
   asyncdispatch, times, strutils, sequtils, json]
 
 import pkg/jsony
+
 import ./actions
+export actions
 
 export net.Port
 export httpclient, asyncdispatch
@@ -35,17 +37,19 @@ type
     tsEndpointStatus = "/health"
     tsEndpointCollections = "/collections"
     tsEndpointKeys = "/keys"
+    tsEndpointAliases = "/aliases"
 
   JsonResponse = (HttpCode, JsonNode)
   TypesenseClientError* = object of CatchableError
 
-proc getUrl*(client: TypesenseClient, ep: TypesenseEndpoint): string =
-  result = "http://$1:$2/$3" % [client.config.url, $(client.config.port), $(ep)]
+proc getUrl*(ts: TypesenseClient, ep: TypesenseEndpoint): string =
+  result = "http://$1:$2/$3" % [ts.config.url, $(ts.config.port), $(ep)]
 
-proc getUrl*(client: TypesenseClient, ep: TypesenseEndpoint, paths: openarray[string]): string =
-  client.getUrl(ep) & "/" & paths.join("/")
+proc getUrl*(ts: TypesenseClient, ep: TypesenseEndpoint, paths: openarray[string]): string =
+  ts.getUrl(ep) & "/" & paths.join("/")
 
 proc parseJson*(res: AsyncResponse): Future[JsonNode] {.async.} =
+  ## Parse response body to JsonNode
   jsony.fromJson(await res.body(), JsonNode)
 
 proc newClient*(address: string, port: Port, apiKey: string): TypesenseClient =
@@ -57,21 +61,26 @@ proc newClient*(address: string, port: Port, apiKey: string): TypesenseClient =
   ])
   result.httpClient = newAsyncHttpClient(headers = headers)
   result.httpClient.timeout = inMilliseconds(result.config.timeout)
+  result.httpClient.close()
 
 proc native*[T](ts: T): TypesenseClient =
   result = TypesenseClient(ts)
 
-proc get*(client: TypesenseClient, ep: TypesenseEndpoint, paths: openarray[string] = []): Future[AsyncResponse] =
+proc get*(ts: TypesenseClient, ep: TypesenseEndpoint, paths: openarray[string] = []): Future[AsyncResponse] =
   # Make a `GET` request to `ep` TypesenseEndpoint
-  return client.httpClient.get(client.getUrl(ep, paths))
+  return ts.httpClient.get(ts.getUrl(ep, paths))
 
-proc post*(client: TypesenseClient, ep: TypesenseEndpoint, data: JsonNode): Future[AsyncResponse] =
+proc post*(ts: TypesenseClient, ep: TypesenseEndpoint, data: JsonNode): Future[AsyncResponse] =
   # Make a `POST` request to `ep` TypesenseEndpoint
-  return client.httpClient.post(client.getUrl(ep), body = $(data))
+  return ts.httpClient.post(ts.getUrl(ep), body = $(data))
 
-proc delete*(client: TypesenseClient, ep: TypesenseEndpoint, paths: openarray[string]): Future[AsyncResponse] =
+proc post*(ts: TypesenseClient, ep: TypesenseEndpoint, data: string): Future[AsyncResponse] =
+  # Make a `POST` request to `ep` TypesenseEndpoint
+  return ts.httpClient.post(ts.getUrl(ep), body = data)
+
+proc delete*(ts: TypesenseClient, ep: TypesenseEndpoint, paths: openarray[string]): Future[AsyncResponse] =
   # Make a `DELETE` request to `ep` TypesenseEndpoint
-  return client.httpClient.delete(client.getUrl(ep, paths))
+  return ts.httpClient.delete(ts.getUrl(ep, paths))
 
 template raiseClientException* {.dirty.} =
   block:
@@ -82,3 +91,17 @@ template raiseClientException* {.dirty.} =
       else: ""
     raise newException(TypesenseClientError,
       $(res.code) & ": " & msg)
+
+proc health*(ts: TypesenseClient): Future[bool] {.async.} =
+  let
+    res = await ts.get(tsEndpointStatus)
+    body = await res.body
+  var status: tuple[ok: bool]
+  case res.code:
+    of Http200:
+      status = fromJson(body, status.type)
+      return status.ok
+    else: discard
+
+proc close*(ts: TypesenseClient) {.inline.} =
+  ts.httpClient.close()

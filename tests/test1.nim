@@ -2,11 +2,11 @@ import std/[unittest, parsecfg, strutils, asyncdispatch, json]
 import typesense
 
 let
-  # dict = loadConfig("/etc/typesense/typesense-server.ini")
-  # rootkey = dict.getSectionValue("server", "api-key").strip()
-  # address = "0.0.0.0"
-  rootkey = "bV9ZXnOpBFc1CPivLCvZ74OuutTniiei44lyziQqrFgACsZy"
-  address = "10.242.195.202"
+  dict = loadConfig("/etc/typesense/typesense-server.ini")
+  rootkey = dict.getSectionValue("server", "api-key").strip()
+  address = "0.0.0.0"
+  # rootkey = "bV9ZXnOpBFc1CPivLCvZ74OuutTniiei44lyziQqrFgACsZy"
+  # address = "10.242.195.202"
 
 template newTypesenseClient() {.dirty.} =
   var ts = newClient(address, rootkey, Port(8108))
